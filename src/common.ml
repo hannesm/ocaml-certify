@@ -20,40 +20,35 @@ let make_dates days =
   | None -> None
 
 let extensions subject_pubkey auth_pubkey names entity =
-  let subject_key_id =
-    let cs = X509.Public_key.id subject_pubkey in
-    (false, `Subject_key_id cs)
-  and authority_key_id =
-    let cs = X509.Public_key.id auth_pubkey in
-    let x = (Some cs, [], None) in
-    (false, `Authority_key_id x)
-  and exts =
-    let ku = (true, (`Key_usage [ `Digital_signature ; `Key_encipherment ]))
-    and bc = (true, `Basic_constraints (false, None))
+  let open X509 in
+  let extensions =
+    let auth = Some (Public_key.id auth_pubkey), [], None in
+    Extension.(add Subject_key_id (false, Public_key.id subject_pubkey)
+                 (singleton Authority_key_id (false, auth)))
+  in
+  let extensions = match names with
+    | [] -> extensions
+    | _ ->
+      let names = List.map (fun x -> `DNS x) names in
+      Extension.(add Subject_alt_name (false, names) extensions)
+  in
+
+  let leaf_extensions =
+    Extension.(add Key_usage (true, [ `Digital_signature ; `Key_encipherment ])
+                 (add Basic_constraints (true, (false, None))
+                    extensions))
+  in
+  match entity with
+  | `CA ->
+    let ku =
+      [ `Key_cert_sign ; `CRL_sign ; `Digital_signature ; `Content_commitment ]
     in
-    match entity with
-    | `CA ->
-       [ (true, (`Basic_constraints (true, None)))
-       ; (true, (`Key_usage [ `Key_cert_sign
-                            ; `CRL_sign
-                            ; `Digital_signature
-                            ; `Content_commitment
-                            ]))
-       ]
-    | `Client ->
-       [ bc ; ku
-         ; (true, (`Ext_key_usage [`Client_auth]))
-       ]
-    | `Server ->
-       [ bc ; ku
-         ; (true, (`Ext_key_usage [`Server_auth]))
-       ]
-  in
-  let alts = match names with
-    | [] -> []
-    | _ -> [ (false, `Subject_alt_name ( List.map (fun x -> `DNS x) names)) ]
-  in
-  authority_key_id :: subject_key_id :: exts @ alts
+    Extension.(add Basic_constraints (true, (true, None))
+                 (add Key_usage (true, ku) extensions))
+  | `Client ->
+    Extension.(add Ext_key_usage (true, [`Client_auth]) leaf_extensions)
+  | `Server ->
+    Extension.(add Ext_key_usage (true, [`Server_auth]) leaf_extensions)
 
 let sign days key pubkey issuer csr names entity =
   match make_dates days with
