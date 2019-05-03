@@ -21,10 +21,10 @@ let make_dates days =
 
 let extensions subject_pubkey auth_pubkey names entity =
   let subject_key_id =
-    let cs = X509.key_id subject_pubkey in
+    let cs = X509.Public_key.id subject_pubkey in
     (false, `Subject_key_id cs)
   and authority_key_id =
-    let cs = X509.key_id auth_pubkey in
+    let cs = X509.Public_key.id auth_pubkey in
     let x = (Some cs, [], None) in
     (false, `Authority_key_id x)
   and exts =
